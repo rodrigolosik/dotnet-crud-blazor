@@ -1,0 +1,111 @@
+﻿@page "/TodoList";
+@using TodoListApp.Shared.Models;
+@inject HttpClient http;
+@inherits LayoutComponentBase;
+
+<h3>TodoList</h3>
+
+<div class="row mt-5 mb-5">
+    <div class="col">
+        <input @bind="taskDescription" class="form-control" />
+    </div>
+    <div class="col">
+        <button @onclick="AddNewTask" class="btn btn-primary">New Task</button>
+    </div>
+</div>
+<div class="row">
+    <div class="col-12">
+
+        @if (todoList is null || !todoList.Any())
+        {
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        }
+        else
+        {
+            <table class="table table-hover">
+                <tbody>
+                    @foreach (var todo in todoList)
+                    {
+                        <tr>
+                            <td>
+                                <input 
+                                class="form-check" 
+                                type="checkbox" 
+                                checked="@todo.IsDone" 
+                                @bind-value="todo.IsDone" 
+                                @oninput="eventArgs => CheckTask(todo, eventArgs.Value)" />
+                            </td>
+                            <td><span class="@(todo.IsDone ? "stripe" : "")">@todo.Description</span></td>
+                            <td>
+                                <button 
+                                    class="btn btn-danger btn-sm" 
+                                    type="button" 
+                                    @onclick="@(async () => await RemoveTask(todo.Id))">
+                                    <i class="oi oi-trash"></i>
+                                </button>
+                                </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    protected List<Todo> todoList = new();
+    protected string taskDescription { get; set; } = String.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetTasksAsync();
+    }
+
+    public async Task GetTasksAsync()
+    {
+        var todos = await http.GetFromJsonAsync<IEnumerable<Todo>>("api/todolist");
+        todoList.AddRange(todos);
+    }
+
+    public async Task AddNewTask()
+    {
+        if (string.IsNullOrEmpty(taskDescription)) return;
+
+        var todo = new Todo
+            {
+                CreatedAt = DateTime.Now,
+                Description = taskDescription
+            };
+
+
+        var response = await http.PostAsJsonAsync("api/todolist", todo);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var responseTodo = await response.Content.ReadFromJsonAsync<Todo>();
+            todoList.Add(responseTodo);
+        }
+
+        ClearTaskDescriptionInput();
+    }
+
+    public async Task CheckTask(Todo todo, object checkedValue)
+    {
+        todo.IsDone = (bool)checkedValue;
+        await http.PutAsJsonAsync("api/TodoList", todo);
+    }
+
+    public async Task RemoveTask(int id)
+    {
+        var response = await http.DeleteAsync($"api/TodoList/{id}");
+
+        if(response.IsSuccessStatusCode)
+        {
+            var todoToRemove = todoList.FirstOrDefault(x => x.Id == id);
+            todoList.Remove(todoToRemove);
+        }
+    }
+
+    private void ClearTaskDescriptionInput() => taskDescription = string.Empty;
+}
